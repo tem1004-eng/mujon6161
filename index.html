@@ -1,0 +1,1887 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>TalkBox · 무전기 화상통화</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+/* === RESET === */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg:       #060a12;
+  --surface:  #0c1422;
+  --surface2: #111d30;
+  --border:   #1a2a45;
+  --border2:  #2a4a75;
+  --accent:   #00c8ff;
+  --acc-glow: rgba(0,200,255,0.35);
+  --green:    #00ff88;
+  --grn-glow: rgba(0,255,136,0.35);
+  --amber:    #ffaa00;
+  --red:      #ff4455;
+  --text:     #b8d0e8;
+  --text-dim: #3a5a7a;
+  --text-hi:  #e8f4ff;
+}
+html { height: 100%; height: -webkit-fill-available; }
+body {
+  width: 100%; height: 100%; height: -webkit-fill-available;
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  overflow: hidden; -webkit-font-smoothing: antialiased;
+  user-select: none; -webkit-user-select: none;
+  overscroll-behavior: none; -webkit-overflow-scrolling: touch;
+}
+body::after {
+  content: ''; position: fixed; inset: 0;
+  background: repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px);
+  pointer-events: none; z-index: 9999;
+}
+
+/* === SCREENS === */
+.screen { position: fixed; inset: 0; display: flex; flex-direction: column; }
+.screen.hide { display: none !important; }
+
+/* =====================================================
+   LANDING SCREEN
+===================================================== */
+#landing {
+  align-items: center; justify-content: flex-start;
+  gap: 20px; padding: 24px;
+  padding-top: max(24px, env(safe-area-inset-top, 24px));
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% -10%, rgba(0,200,255,0.10) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 80% 100%, rgba(0,255,136,0.05) 0%, transparent 60%),
+    var(--bg);
+}
+.brand { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.hdr-brand {
+  display: flex; flex-direction: column;
+  line-height: 1.1; cursor: pointer; flex-shrink: 0; margin-right: 4px;
+  -webkit-tap-highlight-color: transparent; transition: opacity 0.2s;
+}
+.hdr-brand:active { opacity: 0.6; }
+.hdr-piltong {
+  font-size: 9px; font-weight: 800; letter-spacing: 2.5px; text-transform: uppercase;
+  color: var(--green); text-shadow: 0 0 6px var(--grn-glow);
+}
+.hdr-talkbox {
+  font-size: 15px; font-weight: 900; letter-spacing: 3px; text-transform: uppercase;
+  color: var(--accent); text-shadow: 0 0 8px var(--acc-glow);
+}
+
+/* =====================================================
+   YOUTUBE 팝업
+===================================================== */
+#ytModal {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.78);
+  backdrop-filter: blur(14px); display: flex;
+  align-items: center; justify-content: center; z-index: 800; padding: 24px;
+}
+#ytModal.hide { display: none; }
+.yt-box {
+  background: var(--surface); border: 1px solid var(--border2); border-radius: 20px;
+  padding: 32px 28px 24px; max-width: 340px; width: 100%; text-align: center;
+  animation: popIn 0.22s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes popIn { from { transform: scale(0.88); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.yt-icon { font-size: 40px; margin-bottom: 12px; }
+.yt-title { font-size: 16px; font-weight: 700; color: var(--text-hi); line-height: 1.5; margin-bottom: 6px; }
+.yt-sub { font-size: 13px; color: var(--text-dim); margin-bottom: 24px; line-height: 1.6; }
+.yt-btns { display: flex; gap: 10px; }
+.yt-go {
+  flex: 1; padding: 13px; background: #ff0000; color: #fff;
+  border: none; border-radius: 12px; font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: all 0.18s;
+}
+.yt-go:hover { background: #cc0000; box-shadow: 0 4px 18px rgba(255,0,0,0.4); }
+.yt-cancel {
+  flex: 1; padding: 13px; background: transparent; color: var(--text);
+  border: 1.5px solid var(--border2); border-radius: 12px;
+  font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.18s;
+}
+.yt-cancel:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── 브랜드 타이틀 ── */
+.brand-title { display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative; }
+.brand-piltong {
+  font-size: 22px; font-weight: 900; letter-spacing: 8px; text-transform: uppercase;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; color: var(--green);
+  text-shadow: 0 0 8px var(--grn-glow), 0 0 22px var(--grn-glow), 0 0 48px rgba(0,255,136,0.25);
+  animation: piltong-pulse 3s ease-in-out infinite;
+}
+@keyframes piltong-pulse {
+  0%,100% { text-shadow: 0 0 8px var(--grn-glow), 0 0 22px var(--grn-glow), 0 0 48px rgba(0,255,136,0.25); }
+  50%      { text-shadow: 0 0 14px var(--grn-glow), 0 0 36px var(--grn-glow), 0 0 70px rgba(0,255,136,0.40); }
+}
+.brand-talkbox {
+  font-size: 46px; font-weight: 900; letter-spacing: 10px; text-transform: uppercase;
+  color: var(--accent); line-height: 1;
+  text-shadow: 0 0 10px var(--acc-glow), 0 0 28px var(--acc-glow), 0 0 60px rgba(0,200,255,0.30);
+  animation: talkbox-pulse 3s ease-in-out infinite;
+}
+@keyframes talkbox-pulse {
+  0%,100% { text-shadow: 0 0 10px var(--acc-glow), 0 0 28px var(--acc-glow), 0 0 60px rgba(0,200,255,0.30); }
+  50%      { text-shadow: 0 0 18px var(--acc-glow), 0 0 44px var(--acc-glow), 0 0 90px rgba(0,200,255,0.50); }
+}
+.brand-title::after {
+  content: ''; display: block; width: 80%; height: 1px; margin-top: 6px;
+  background: linear-gradient(to right, transparent, var(--accent), transparent); opacity: 0.45;
+}
+.brand-sub { font-size: 11px; color: var(--text-dim); letter-spacing: 3px; text-transform: uppercase; margin-top: 2px; }
+
+/* Card */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 28px; width: 100%; max-width: 420px; }
+.card-label { font-size: 16px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); text-shadow: 0 0 12px var(--acc-glow); margin-bottom: 14px; }
+.input-row { display: flex; gap: 8px; margin-bottom: 14px; }
+.code-input {
+  flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 18px; color: var(--text-hi); font-family: 'Courier New', monospace;
+  font-size: 22px; font-weight: 700; letter-spacing: 5px; text-align: center; text-transform: uppercase;
+  outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+}
+.code-input::placeholder { color: #c8a000; font-size: 14px; letter-spacing: 1px; font-weight: 600; opacity: 0.85; }
+.code-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,200,255,0.12); }
+.btn-row { display: flex; gap: 10px; }
+#createCard { margin-bottom: 0; }
+#joinCard   { margin-top: 12px; }
+.hint-sm { font-size: 12px; color: var(--text-dim); margin-bottom: 14px; letter-spacing: 0.3px; }
+.btn-full { width: 100%; }
+.created-block {
+  margin-top: 18px; background: var(--bg); border: 1px solid var(--border2);
+  border-radius: 14px; padding: 18px 16px 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  animation: fadeIn 0.3s ease;
+}
+.created-block.hide { display: none; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+.created-label { font-size: 11px; letter-spacing: 2px; color: var(--text-dim); text-transform: uppercase; }
+.created-code { font-family: 'Courier New', monospace; font-size: 36px; font-weight: 800; color: var(--green); letter-spacing: 8px; text-shadow: 0 0 18px var(--grn-glow); }
+.btn-copy { width: 100%; padding: 12px; border-radius: 10px; background: rgba(0,255,136,0.12); border: 1.5px solid var(--green); color: var(--green); font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.18s; letter-spacing: 0.3px; }
+.btn-copy:hover  { background: rgba(0,255,136,0.22); box-shadow: 0 4px 18px var(--grn-glow); }
+.btn-copy.copied { background: var(--green); color: var(--bg); }
+.created-hint { font-size: 12px; color: var(--text-dim); text-align: center; line-height: 1.6; }
+.created-hint strong { color: var(--accent); }
+#joinCard .input-row { margin-bottom: 14px; }
+.btn { flex: 1; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.18s; border: none; letter-spacing: 0.3px; }
+.btn-primary { background: var(--accent); color: var(--bg); }
+.btn-primary:hover { background: #20d8ff; box-shadow: 0 6px 24px var(--acc-glow); }
+.btn-secondary { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); }
+.btn-secondary:hover { background: rgba(0,200,255,0.10); box-shadow: 0 6px 24px var(--acc-glow); }
+.hint { font-size: 12px; color: var(--text-dim); text-align: center; line-height: 1.7; }
+.hint em { color: var(--accent); font-style: normal; font-weight: 600; }
+.status-bar {
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; color: var(--text-dim); letter-spacing: 1px; white-space: nowrap;
+}
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--grn-glow); animation: live-blink 2s ease-in-out infinite; }
+@keyframes live-blink { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+/* =====================================================
+   언어 선택 모달 (입장 전)
+===================================================== */
+#langJoinModal, #selfTestModal {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.93);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 700; padding: 20px;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+#langJoinModal.hide, #selfTestModal.hide { display: none; }
+.lang-join-box {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 24px; padding: 28px 22px 22px;
+  max-width: 380px; width: 100%;
+  animation: popIn 0.25s cubic-bezier(.34,1.56,.64,1);
+}
+.lang-join-title {
+  font-size: 14px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase;
+  color: var(--accent); text-shadow: 0 0 8px var(--acc-glow);
+  text-align: center; margin-bottom: 6px;
+}
+.lang-join-sub {
+  font-size: 13px; color: var(--text-dim); text-align: center;
+  margin-bottom: 20px; line-height: 1.65;
+}
+.lang-join-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+.lang-join-opt {
+  padding: 14px 8px; background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 14px; cursor: pointer; transition: all 0.18s;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.lang-join-opt .lj-flag { font-size: 26px; }
+.lang-join-opt .lj-name { font-size: 12px; font-weight: 700; color: var(--text); }
+.lang-join-opt:active { transform: scale(0.95); }
+.lang-join-opt.sel {
+  border-color: var(--green); background: rgba(0,255,136,0.10);
+  box-shadow: 0 0 18px rgba(0,255,136,0.2);
+}
+.lang-join-opt.sel .lj-name { color: var(--green); }
+.btn-join-confirm {
+  width: 100%; padding: 16px; background: var(--accent); color: var(--bg);
+  border: none; border-radius: 14px; font-size: 16px; font-weight: 800;
+  cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.btn-join-confirm:hover { background: #20d8ff; box-shadow: 0 6px 24px var(--acc-glow); }
+.btn-join-confirm:active { transform: scale(0.97); }
+
+/* =====================================================
+   CALL SCREEN
+===================================================== */
+#call { display: none; flex-direction: column; }
+#call.active { display: flex; }
+
+/* Header */
+.call-hdr {
+  display: flex; align-items: center;
+  padding: 10px 14px;
+  padding-top: max(10px, env(safe-area-inset-top, 10px));
+  height: calc(56px + env(safe-area-inset-top, 0px));
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  gap: 10px; flex-shrink: 0;
+}
+.signal-bars { display: flex; gap: 3px; align-items: flex-end; }
+.sbar { width: 4px; border-radius: 2px; background: var(--green); animation: sbar-wave 1.4s ease-in-out infinite; }
+.sbar:nth-child(1) { height: 7px;  animation-delay: 0s; }
+.sbar:nth-child(2) { height: 11px; animation-delay: 0.12s; }
+.sbar:nth-child(3) { height: 15px; animation-delay: 0.24s; }
+.sbar:nth-child(4) { height: 19px; animation-delay: 0.36s; }
+@keyframes sbar-wave { 0%,100%{ opacity:1; } 50%{ opacity:0.25; } }
+.ch-info { flex: 1; }
+.ch-lbl { font-size: 10px; color: var(--text-dim); letter-spacing: 1.5px; text-transform: uppercase; }
+.ch-code { font-family: 'Courier New', monospace; font-size: 16px; font-weight: 700; color: var(--accent); letter-spacing: 3px; }
+.peer-badge { display: flex; align-items: center; gap: 6px; padding: 5px 11px; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.pdot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 7px var(--grn-glow); animation: live-blink 2s ease-in-out infinite; }
+.btn-leave { padding: 7px 13px; background: rgba(255,68,85,0.12); border: 1px solid rgba(255,68,85,0.35); border-radius: 8px; color: var(--red); font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.btn-leave:active { background: rgba(255,68,85,0.28); }
+
+/* ─── VIDEO GRID — 인원 제한 없음, 동적 레이아웃 ─── */
+.vgrid {
+  flex: 1; padding: 8px; gap: 6px;
+  display: grid; overflow-y: auto; overflow-x: hidden;
+  min-height: 0; -webkit-overflow-scrolling: touch;
+  align-content: start; grid-auto-rows: 1fr;
+  grid-template-columns: 1fr; /* JS가 업데이트 */
+}
+
+/* Video Tile */
+.vtile {
+  position: relative; border-radius: 10px; overflow: hidden;
+  background: var(--surface); border: 2px solid var(--border);
+  transition: border-color 0.25s, box-shadow 0.25s;
+  min-height: 80px; min-width: 0;
+}
+.vtile.is-me   { border-color: rgba(0,200,255,0.4); }
+.vtile.talking { border-color: var(--green); box-shadow: 0 0 20px var(--grn-glow); }
+.vtile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vtile.is-me video { transform: scaleX(-1); }
+
+/* Tile overlay */
+.toverlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 6px 8px 8px; background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%); display: flex; align-items: center; justify-content: space-between; }
+.tname { font-size: 11px; font-weight: 700; color: #fff; letter-spacing: 0.3px; }
+
+/* Language flag badge */
+.lang-badge { position: absolute; top: 6px; left: 6px; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border-radius: 8px; padding: 2px 6px; font-size: 13px; z-index: 5; }
+
+/* Speaking ring */
+.speak-ring { position: absolute; inset: -2px; border-radius: 11px; border: 3px solid var(--green); opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+.vtile.talking .speak-ring { opacity: 1; animation: speak-pulse 0.8s ease-in-out infinite; }
+@keyframes speak-pulse { 0%,100% { box-shadow: 0 0 10px var(--grn-glow); } 50% { box-shadow: 0 0 28px var(--grn-glow); } }
+
+/* =====================================================
+   ★ 자막 스트립 — 영상 아래 / 메뉴 위 ★
+===================================================== */
+.sub-strip {
+  flex-shrink: 0; height: 140px;   /* ★ 높이 확대 */
+  background: rgba(4, 8, 18, 0.97);
+  border-top: 1px solid var(--border2);
+  border-bottom: 1px solid var(--border);
+  overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  position: relative;
+  transition: opacity 0.3s;
+}
+.sub-strip-hdr {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px 3px;
+  background: rgba(4,8,18,0.98);
+  border-bottom: 1px solid rgba(42,74,117,0.4);
+  font-size: 9px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.sub-strip-hdr-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 6px var(--acc-glow);
+  animation: live-blink 1.6s ease-in-out infinite;
+}
+.sub-strip-inner {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 4px 12px 6px;
+}
+.sub-entry {
+  display: flex; align-items: baseline; gap: 7px;
+  animation: subSlide 0.18s ease;
+  flex-shrink: 0; line-height: 1.45;
+  padding: 2px 0;
+}
+@keyframes subSlide { from { opacity:0; transform: translateY(5px); } to { opacity:1; transform:none; } }
+.sub-entry.interim { opacity: 0.55; }
+
+/* ★ 화자 라벨 — 더 크고 선명하게 */
+.sub-speaker {
+  font-size: 12px; font-weight: 800; color: var(--accent);
+  white-space: nowrap; flex-shrink: 0;
+  text-shadow: 0 0 8px var(--acc-glow);
+}
+/* ★ 원문 자막 — 더 크게 */
+.sub-text {
+  font-size: 15px; font-weight: 600; color: var(--text-hi);
+  word-break: break-word; line-height: 1.4;
+}
+.sub-entry.interim .sub-text { color: var(--text-dim); font-style: italic; font-size: 14px; }
+
+/* ★ 번역 자막 행 — 배경 강조로 원문과 구분 */
+.sub-entry.translated {
+  background: rgba(0,200,255,0.07);
+  border-left: 2.5px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  padding: 2px 8px 2px 6px;
+  margin-left: 2px;
+}
+.sub-entry.translated .sub-speaker { color: var(--green); text-shadow: 0 0 8px var(--grn-glow); }
+.sub-entry.translated .sub-text    { color: #e8f4ff; font-size: 15px; font-weight: 700; }
+
+/* ★ 셀프테스트 번역 자막 — 주황색 강조 */
+.sub-entry.selftest-trans {
+  background: rgba(255,170,0,0.10);
+  border-left: 2.5px solid var(--amber);
+  border-radius: 0 6px 6px 0;
+  padding: 2px 8px 2px 6px;
+  margin-left: 2px;
+}
+.sub-entry.selftest-trans .sub-speaker { color: var(--amber); }
+.sub-entry.selftest-trans .sub-text    { color: #fff3cc; font-size: 15px; font-weight: 700; }
+
+.sub-empty { font-size: 12px; color: var(--text-dim); text-align: center; padding: 14px; font-style: italic; }
+
+/* =====================================================
+   CONTROLS
+===================================================== */
+.call-ctrls {
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 8px; row-gap: 6px;
+  padding: 10px 12px 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+  padding-left:  max(12px, env(safe-area-inset-left,   12px));
+  padding-right: max(12px, env(safe-area-inset-right,  12px));
+  background: var(--surface); border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.cbtn { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.cbtn-inner { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; background: var(--surface2); border: 1.5px solid var(--border); transition: all 0.2s; }
+.cbtn.on  .cbtn-inner { background: rgba(0,200,255,0.12); border-color: var(--accent); box-shadow: 0 0 14px var(--acc-glow); }
+.cbtn.off .cbtn-inner { background: rgba(255,68,85,0.12); border-color: rgba(255,68,85,0.45); }
+.cbtn-lbl { font-size: 10px; color: var(--text-dim); letter-spacing: 0.3px; white-space: nowrap; }
+
+/* PTT 버튼 */
+.ptt-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ptt-btn {
+  width: 68px; height: 68px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 26px;
+  background: linear-gradient(145deg, var(--surface2), var(--bg));
+  border: 2.5px solid var(--accent); cursor: pointer; transition: all 0.12s;
+  position: relative; box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 24px var(--acc-glow);
+  -webkit-tap-highlight-color: transparent; touch-action: none;
+}
+.ptt-btn::before { content: ''; position: absolute; inset: -8px; border-radius: 50%; border: 2px solid var(--accent); opacity: 0.22; animation: ptt-ring 2.5s ease-in-out infinite; }
+@keyframes ptt-ring { 0%,100%{ transform:scale(1);opacity:0.22; } 50%{ transform:scale(1.06);opacity:0.08; } }
+.ptt-btn.tx { background: linear-gradient(145deg, #00e070, #00cc60); border-color: var(--green); box-shadow: 0 4px 30px rgba(0,255,136,0.6), 0 0 50px rgba(0,255,136,0.3); transform: scale(0.94); }
+.ptt-btn.tx::before { border-color: var(--green); animation: ptt-ring-tx 0.45s ease-in-out infinite; }
+@keyframes ptt-ring-tx { 0%,100%{ transform:scale(1);opacity:0.6; } 50%{ transform:scale(1.12);opacity:0.15; } }
+.ptt-btn.always { border-color: var(--green); box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 24px var(--grn-glow); }
+.ptt-btn.always::before { border-color: var(--green); }
+.ptt-lbl { font-size: 10px; color: var(--text-dim); letter-spacing: 0.3px; white-space: nowrap; }
+
+/* =====================================================
+   INVITE MODAL
+===================================================== */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.82); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; z-index: 500; padding: 20px; }
+.modal-bg.hide { display: none; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 32px; max-width: 380px; width: 100%; text-align: center; }
+.modal-title { font-size: 11px; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; margin-bottom: 20px; }
+.modal-code { font-family: 'Courier New', monospace; font-size: 38px; font-weight: 800; color: var(--text-hi); letter-spacing: 8px; padding: 18px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; }
+.modal-hint { font-size: 13px; color: var(--text-dim); margin-bottom: 20px; line-height: 1.6; }
+.modal-btns { display: flex; flex-direction: column; gap: 10px; }
+
+/* Language picker (in-call) */
+.lang-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.lang-opt { padding: 10px 8px; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; transition: all 0.2s; font-size: 14px; color: var(--text); text-align: center; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.lang-opt:active { border-color: var(--accent); color: var(--accent); }
+.lang-opt.active { border-color: var(--green); color: var(--green); background: rgba(0,255,136,0.08); }
+
+/* =====================================================
+   TOAST / MODE IND
+===================================================== */
+#toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 22px; font-size: 14px; color: var(--text-hi); z-index: 1000; white-space: nowrap; box-shadow: 0 6px 30px rgba(0,0,0,0.5); transition: opacity 0.3s, transform 0.3s; }
+#toast.hide { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(-6px); }
+#mode-ind { position: fixed; bottom: 155px; left: 50%; transform: translateX(-50%); background: var(--green); color: var(--bg); padding: 6px 18px; border-radius: 20px; font-size: 13px; font-weight: 800; letter-spacing: 0.5px; opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 100; }
+#mode-ind.show { opacity: 1; }
+
+/* 텍스트 자막 입력 (iOS fallback) */
+.text-sub-wrap { display: none; flex-direction: column; align-items: center; gap: 4px; }
+.text-sub-row { display: flex; align-items: center; gap: 6px; }
+.text-sub-input { background: var(--surface2); border: 1.5px solid var(--border); border-radius: 20px; color: var(--text-hi); font-size: 14px; padding: 8px 14px; outline: none; width: 130px; -webkit-appearance: none; transition: border-color 0.2s; }
+.text-sub-input:focus { border-color: var(--accent); }
+.text-sub-input::placeholder { color: var(--text-dim); }
+.text-sub-send { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(145deg, var(--accent), #0096cc); border: none; cursor: pointer; font-size: 15px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px var(--acc-glow); -webkit-tap-highlight-color: transparent; flex-shrink: 0; touch-action: manipulation; }
+.text-sub-lbl { font-size: 10px; color: var(--text-dim); letter-spacing: 0.4px; }
+
+/* ─── 반응형 ─── */
+@media (max-width: 420px) {
+  .cbtn-inner { width: 42px; height: 42px; font-size: 18px; }
+  .ptt-btn { width: 60px; height: 60px; font-size: 22px; }
+  .brand-talkbox { font-size: 36px; letter-spacing: 7px; }
+  .brand-piltong { font-size: 18px; letter-spacing: 6px; }
+  .card { padding: 20px; }
+  .sub-strip { height: 120px; }
+  .call-ctrls { gap: 6px; }
+  .text-sub-input { width: 110px; }
+}
+@media (max-width: 360px) {
+  .cbtn-inner { width: 38px; height: 38px; font-size: 16px; }
+  .ptt-btn { width: 54px; height: 54px; font-size: 20px; }
+  .cbtn-lbl { font-size: 9px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== LANDING ===================== -->
+<div class="screen" id="landing">
+  <div class="brand">
+    <div class="brand-title">
+      <span class="brand-piltong" onclick="openYouTube()">Piltong</span>
+      <span class="brand-talkbox">TalkBox</span>
+    </div>
+    <div class="brand-sub">Video Walkie · 무전기 화상통화</div>
+  </div>
+
+  <!-- 채널 개설 -->
+  <div class="card" id="createCard">
+    <div class="card-label">🛰️ 채널 개설</div>
+    <div class="hint-sm">버튼을 누르면 채널 코드가 만들어져요</div>
+    <button class="btn btn-primary btn-full" onclick="doCreate()">채널 개설하기</button>
+    <div id="createdBlock" class="created-block hide">
+      <div class="created-label">생성된 채널 코드</div>
+      <div class="created-code" id="createdCode">——</div>
+      <button class="btn btn-copy" onclick="copyCreatedCode()">📋 채널코드 복사하기</button>
+      <div class="created-hint">코드를 공유한 뒤<br>아래 <strong>채널 참여</strong>를 눌러 입장하세요</div>
+    </div>
+  </div>
+
+  <!-- 채널 참여 -->
+  <div class="card" id="joinCard">
+    <div class="card-label">📻 채널 참여</div>
+    <div class="input-row">
+      <input
+        class="code-input" id="codeInput" type="text" maxlength="6"
+        placeholder="채널코드 붙여넣기"
+        autocomplete="off" autocorrect="off" spellcheck="false"
+        oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
+        onclick="pasteCode(this)"
+      />
+    </div>
+    <button class="btn btn-secondary btn-full" onclick="doJoin()">채널 참여하기</button>
+  </div>
+
+  <!-- 셀프 테스트 카드 -->
+  <div class="card" id="selfTestCard">
+    <div class="card-label" style="color:var(--amber);text-shadow:0 0 12px rgba(255,170,0,0.4);">🧪 셀프 테스트</div>
+    <div class="hint-sm">혼자서 번역 자막 기능을 테스트해 보세요.<br>말하면 선택한 언어로 바로 번역됩니다.</div>
+    <button class="btn btn-full" style="background:rgba(255,170,0,0.15);border:1.5px solid var(--amber);color:var(--amber);border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;" onclick="doSelfTest()">🧪 번역 테스트 시작</button>
+  </div>
+
+  <div class="status-bar">
+    <div class="live-dot"></div>
+    <span>서버 연결됨 · TalkBox v2.0</span>
+  </div>
+</div>
+
+<!-- ===================== 언어 선택 모달 (입장 전) ===================== -->
+<div id="langJoinModal" class="hide">
+  <div class="lang-join-box">
+    <div class="lang-join-title">🌐 내 언어를 선택하세요</div>
+    <div class="lang-join-sub">
+      말하는 언어를 선택하면<br>
+      다른 참가자의 말이 <strong style="color:var(--accent)">자동 번역</strong>되어<br>내 화면에 자막으로 표시됩니다
+    </div>
+    <div class="lang-join-grid" id="langJoinGrid">
+      <button class="lang-join-opt sel" data-lang="ko-KR" data-flag="🇰🇷" data-name="한국어" onclick="selectJoinLang(this)">
+        <span class="lj-flag">🇰🇷</span><span class="lj-name">한국어</span>
+      </button>
+      <button class="lang-join-opt" data-lang="en-US" data-flag="🇺🇸" data-name="English" onclick="selectJoinLang(this)">
+        <span class="lj-flag">🇺🇸</span><span class="lj-name">English</span>
+      </button>
+      <button class="lang-join-opt" data-lang="ja-JP" data-flag="🇯🇵" data-name="日本語" onclick="selectJoinLang(this)">
+        <span class="lj-flag">🇯🇵</span><span class="lj-name">日本語</span>
+      </button>
+      <button class="lang-join-opt" data-lang="zh-CN" data-flag="🇨🇳" data-name="中文" onclick="selectJoinLang(this)">
+        <span class="lj-flag">🇨🇳</span><span class="lj-name">中文</span>
+      </button>
+      <button class="lang-join-opt" data-lang="es-ES" data-flag="🇪🇸" data-name="Español" onclick="selectJoinLang(this)">
+        <span class="lj-flag">🇪🇸</span><span class="lj-name">Español</span>
+      </button>
+      <button class="lang-join-opt" data-lang="fr-FR" data-flag="🇫🇷" data-name="Français" onclick="selectJoinLang(this)">
+        <span class="lj-flag">🇫🇷</span><span class="lj-name">Français</span>
+      </button>
+      <button class="lang-join-opt" data-lang="de-DE" data-flag="🇩🇪" data-name="Deutsch" onclick="selectJoinLang(this)">
+        <span class="lj-flag">🇩🇪</span><span class="lj-name">Deutsch</span>
+      </button>
+      <button class="lang-join-opt" data-lang="pt-BR" data-flag="🇧🇷" data-name="Português" onclick="selectJoinLang(this)">
+        <span class="lj-flag">🇧🇷</span><span class="lj-name">Português</span>
+      </button>
+      <button class="lang-join-opt" data-lang="hi-IN" data-flag="🇮🇳" data-name="हिन्दी" onclick="selectJoinLang(this)">
+        <span class="lj-flag">🇮🇳</span><span class="lj-name">हिन्दी</span>
+      </button>
+      <button class="lang-join-opt" data-lang="vi-VN" data-flag="🇻🇳" data-name="Tiếng Việt" onclick="selectJoinLang(this)">
+        <span class="lj-flag">🇻🇳</span><span class="lj-name">Tiếng Việt</span>
+      </button>
+      <button class="lang-join-opt" data-lang="fil-PH" data-flag="🇵🇭" data-name="Filipino" onclick="selectJoinLang(this)">
+        <span class="lj-flag">🇵🇭</span><span class="lj-name">Filipino</span>
+      </button>
+      <button class="lang-join-opt" data-lang="mn-MN" data-flag="🇲🇳" data-name="Монгол" onclick="selectJoinLang(this)">
+        <span class="lj-flag">🇲🇳</span><span class="lj-name">Монгол</span>
+      </button>
+      <button class="lang-join-opt" data-lang="km-KH" data-flag="🇰🇭" data-name="ខ្មែរ" onclick="selectJoinLang(this)">
+        <span class="lj-flag">🇰🇭</span><span class="lj-name">ខ្មែរ</span>
+      </button>
+    </div>
+    <button class="btn-join-confirm" onclick="confirmJoinLang()">✅ 이 언어로 입장하기</button>
+  </div>
+</div>
+
+<!-- ===================== 셀프 테스트 모달 ===================== -->
+<div id="selfTestModal" class="hide">
+  <div class="lang-join-box">
+    <div class="lang-join-title" style="color:var(--amber);text-shadow:0 0 8px rgba(255,170,0,0.4);">🧪 셀프 테스트</div>
+    <div class="lang-join-sub">
+      내가 말할 언어와<br>
+      번역해서 보고 싶은 <strong style="color:var(--amber)">목표 언어</strong>를 선택하세요
+    </div>
+    <div style="font-size:12px;color:var(--accent);font-weight:700;letter-spacing:1px;margin-bottom:8px;">내가 말할 언어</div>
+    <div class="lang-join-grid" id="selfTestSrcGrid">
+      <button class="lang-join-opt sel" data-lang="ko-KR" data-flag="🇰🇷" data-name="한국어" onclick="selectSelfTestSrc(this)"><span class="lj-flag">🇰🇷</span><span class="lj-name">한국어</span></button>
+      <button class="lang-join-opt" data-lang="en-US" data-flag="🇺🇸" data-name="English" onclick="selectSelfTestSrc(this)"><span class="lj-flag">🇺🇸</span><span class="lj-name">English</span></button>
+      <button class="lang-join-opt" data-lang="ja-JP" data-flag="🇯🇵" data-name="日本語" onclick="selectSelfTestSrc(this)"><span class="lj-flag">🇯🇵</span><span class="lj-name">日本語</span></button>
+      <button class="lang-join-opt" data-lang="zh-CN" data-flag="🇨🇳" data-name="中文" onclick="selectSelfTestSrc(this)"><span class="lj-flag">🇨🇳</span><span class="lj-name">中文</span></button>
+      <button class="lang-join-opt" data-lang="es-ES" data-flag="🇪🇸" data-name="Español" onclick="selectSelfTestSrc(this)"><span class="lj-flag">🇪🇸</span><span class="lj-name">Español</span></button>
+      <button class="lang-join-opt" data-lang="fr-FR" data-flag="🇫🇷" data-name="Français" onclick="selectSelfTestSrc(this)"><span class="lj-flag">🇫🇷</span><span class="lj-name">Français</span></button>
+      <button class="lang-join-opt" data-lang="hi-IN" data-flag="🇮🇳" data-name="हिन्दी" onclick="selectSelfTestSrc(this)"><span class="lj-flag">🇮🇳</span><span class="lj-name">हिन्दी</span></button>
+      <button class="lang-join-opt" data-lang="vi-VN" data-flag="🇻🇳" data-name="Tiếng Việt" onclick="selectSelfTestSrc(this)"><span class="lj-flag">🇻🇳</span><span class="lj-name">Tiếng Việt</span></button>
+      <button class="lang-join-opt" data-lang="fil-PH" data-flag="🇵🇭" data-name="Filipino" onclick="selectSelfTestSrc(this)"><span class="lj-flag">🇵🇭</span><span class="lj-name">Filipino</span></button>
+      <button class="lang-join-opt" data-lang="mn-MN" data-flag="🇲🇳" data-name="Монгол" onclick="selectSelfTestSrc(this)"><span class="lj-flag">🇲🇳</span><span class="lj-name">Монгол</span></button>
+      <button class="lang-join-opt" data-lang="km-KH" data-flag="🇰🇭" data-name="ខ្មែរ" onclick="selectSelfTestSrc(this)"><span class="lj-flag">🇰🇭</span><span class="lj-name">ខ្មែរ</span></button>
+    </div>
+    <div style="font-size:12px;color:var(--amber);font-weight:700;letter-spacing:1px;margin-bottom:8px;margin-top:4px;">번역 목표 언어</div>
+    <div class="lang-join-grid" id="selfTestDstGrid">
+      <button class="lang-join-opt" data-lang="ko" data-flag="🇰🇷" data-name="한국어" onclick="selectSelfTestDst(this)"><span class="lj-flag">🇰🇷</span><span class="lj-name">한국어</span></button>
+      <button class="lang-join-opt sel" data-lang="en" data-flag="🇺🇸" data-name="English" onclick="selectSelfTestDst(this)"><span class="lj-flag">🇺🇸</span><span class="lj-name">English</span></button>
+      <button class="lang-join-opt" data-lang="ja" data-flag="🇯🇵" data-name="日本語" onclick="selectSelfTestDst(this)"><span class="lj-flag">🇯🇵</span><span class="lj-name">日本語</span></button>
+      <button class="lang-join-opt" data-lang="zh" data-flag="🇨🇳" data-name="中文" onclick="selectSelfTestDst(this)"><span class="lj-flag">🇨🇳</span><span class="lj-name">中文</span></button>
+      <button class="lang-join-opt" data-lang="es" data-flag="🇪🇸" data-name="Español" onclick="selectSelfTestDst(this)"><span class="lj-flag">🇪🇸</span><span class="lj-name">Español</span></button>
+      <button class="lang-join-opt" data-lang="fr" data-flag="🇫🇷" data-name="Français" onclick="selectSelfTestDst(this)"><span class="lj-flag">🇫🇷</span><span class="lj-name">Français</span></button>
+      <button class="lang-join-opt" data-lang="de" data-flag="🇩🇪" data-name="Deutsch" onclick="selectSelfTestDst(this)"><span class="lj-flag">🇩🇪</span><span class="lj-name">Deutsch</span></button>
+      <button class="lang-join-opt" data-lang="pt" data-flag="🇧🇷" data-name="Português" onclick="selectSelfTestDst(this)"><span class="lj-flag">🇧🇷</span><span class="lj-name">Português</span></button>
+      <button class="lang-join-opt" data-lang="hi" data-flag="🇮🇳" data-name="हिन्दी" onclick="selectSelfTestDst(this)"><span class="lj-flag">🇮🇳</span><span class="lj-name">हिन्दी</span></button>
+      <button class="lang-join-opt" data-lang="vi" data-flag="🇻🇳" data-name="Tiếng Việt" onclick="selectSelfTestDst(this)"><span class="lj-flag">🇻🇳</span><span class="lj-name">Tiếng Việt</span></button>
+      <button class="lang-join-opt" data-lang="fil" data-flag="🇵🇭" data-name="Filipino" onclick="selectSelfTestDst(this)"><span class="lj-flag">🇵🇭</span><span class="lj-name">Filipino</span></button>
+      <button class="lang-join-opt" data-lang="mn" data-flag="🇲🇳" data-name="Монгол" onclick="selectSelfTestDst(this)"><span class="lj-flag">🇲🇳</span><span class="lj-name">Монгол</span></button>
+      <button class="lang-join-opt" data-lang="km" data-flag="🇰🇭" data-name="ខ្មែរ" onclick="selectSelfTestDst(this)"><span class="lj-flag">🇰🇭</span><span class="lj-name">ខ្មែរ</span></button>
+    </div>
+    <button class="btn-join-confirm" style="background:var(--amber);color:#000;" onclick="confirmSelfTest()">🧪 테스트 시작</button>
+  </div>
+</div>
+
+<!-- ===================== CALL SCREEN ===================== -->
+<div class="screen hide" id="call">
+  <!-- Header -->
+  <div class="call-hdr">
+    <div class="hdr-brand" onclick="openYouTube()">
+      <span class="hdr-piltong">Piltong</span>
+      <span class="hdr-talkbox">TalkBox</span>
+    </div>
+    <div class="signal-bars">
+      <div class="sbar"></div><div class="sbar"></div>
+      <div class="sbar"></div><div class="sbar"></div>
+    </div>
+    <div class="ch-info">
+      <div class="ch-lbl" id="chLbl">채널</div>
+      <div class="ch-code" id="hdrCode">——</div>
+    </div>
+    <div class="peer-badge" id="peerBadge">
+      <div class="pdot"></div>
+      <span id="peerCount">1</span>명
+    </div>
+    <!-- 셀프 테스트 배지 (평소엔 숨김) -->
+    <div id="selfTestBadge" class="hide" style="display:none;align-items:center;gap:5px;padding:5px 11px;background:rgba(255,170,0,0.15);border:1px solid var(--amber);border-radius:20px;font-size:12px;font-weight:700;color:var(--amber);white-space:nowrap;">🧪 테스트 중</div>
+    <button class="btn-leave" onclick="leaveRoom()">나가기 ✕</button>
+  </div>
+
+  <!-- Video Grid (인원 제한 없음) -->
+  <div class="vgrid" id="vgrid"></div>
+
+  <!-- ★ 텍스트 자막 입력 (항상 표시 — 음성인식 실패해도 자막 전송 가능) ★ -->
+  <div id="textSubBar" style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:rgba(6,10,18,0.98);border-top:1px solid var(--border);">
+    <input type="text" id="textSubInput"
+      placeholder="🎤 음성 안 될 때 여기에 직접 입력 후 전송 →"
+      autocomplete="off" autocorrect="off" spellcheck="false"
+      style="flex:1;background:var(--surface2);border:1.5px solid var(--border2);border-radius:8px;padding:7px 10px;color:var(--text-hi);font-size:13px;outline:none;min-width:0;"
+      onkeydown="if(event.key==='Enter'){sendTextSub('textSubInput');}"
+    />
+    <button onclick="sendTextSub('textSubInput')"
+      style="flex-shrink:0;padding:7px 14px;background:linear-gradient(145deg,var(--accent),#0090cc);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;cursor:pointer;">➤</button>
+  </div>
+
+  <!-- ★ 실시간 자막 스트립 ★ -->
+  <div class="sub-strip" id="subStrip">
+    <div class="sub-strip-hdr">
+      <div class="sub-strip-hdr-dot"></div>
+      <span id="micStatusTxt" style="flex:1;">실시간 자막</span>
+      <button id="micRestartBtn" onclick="forceRestartRecog()" style="background:var(--surface2);border:1px solid var(--border2);color:var(--accent);border-radius:6px;padding:1px 8px;font-size:10px;cursor:pointer;display:none;margin-left:6px;">🔄 재시작</button>
+    </div>
+    <div class="sub-strip-inner" id="subStripInner">
+      <div class="sub-empty" id="subEmpty">자막이 여기에 표시됩니다</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="call-ctrls">
+    <button class="cbtn on" id="micBtn" onclick="toggleMic()">
+      <div class="cbtn-inner">🎤</div>
+      <span class="cbtn-lbl">마이크</span>
+    </button>
+    <button class="cbtn on" id="camBtn" onclick="toggleCam()">
+      <div class="cbtn-inner">📷</div>
+      <span class="cbtn-lbl">카메라</span>
+    </button>
+    <!-- 마이크 상태 표시 (항상 켜짐) -->
+    <div class="ptt-wrap" id="pttWrap">
+      <div class="ptt-btn always" id="pttBtn" style="cursor:default;">🎤</div>
+      <span class="ptt-lbl" id="pttLbl">마이크 자동 인식 중</span>
+    </div>
+    <!-- 텍스트 입력은 자막 스트립 위로 이동 (항상 표시) -->
+    <!-- 셀프 테스트 전용 텍스트 입력창 (selfTestMode 일 때 표시) -->
+    <div class="text-sub-wrap" id="selfTestInputWrap" style="display:none;">
+      <div class="text-sub-row">
+        <input type="text" id="selfTestInput" class="text-sub-input"
+          placeholder="말 대신 텍스트로 입력..."
+          autocomplete="off" autocorrect="off" spellcheck="false"
+          style="border-color:var(--amber);"
+          onkeydown="if(event.key==='Enter'){sendTextSub('selfTestInput');}"
+        />
+        <button class="text-sub-send" onclick="sendTextSub('selfTestInput')"
+          style="background:linear-gradient(145deg,var(--amber),#cc8800);">➤</button>
+      </div>
+      <span class="text-sub-lbl" style="color:var(--amber);">🧪 셀프 테스트 — 입력 후 번역 확인</span>
+    </div>
+    <button class="cbtn" id="invBtn" onclick="showInvite()">
+      <div class="cbtn-inner">🔗</div>
+      <span class="cbtn-lbl">초대</span>
+    </button>
+    <button class="cbtn on" id="subBtn" onclick="toggleSubtitle()">
+      <div class="cbtn-inner">💬</div>
+      <span class="cbtn-lbl" id="subBtnLbl">자막 켜짐</span>
+    </button>
+    <button class="cbtn" id="langBtn" onclick="showLangPicker()">
+      <div class="cbtn-inner" id="langIcon">🇰🇷</div>
+      <span class="cbtn-lbl" id="langLbl">한국어</span>
+    </button>
+  </div>
+</div>
+
+<!-- ===================== INVITE MODAL ===================== -->
+<div class="modal-bg hide" id="invModal" onclick="hideInvite()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">📡 채널 코드 공유</div>
+    <div class="modal-code" id="invCode">——</div>
+    <div class="modal-hint">이 코드를 친구에게 알려주세요.<br>같은 코드로 접속하면 바로 연결됩니다!</div>
+    <div class="modal-btns">
+      <button class="btn btn-primary" onclick="copyCode()">코드 복사하기 📋</button>
+      <button class="btn btn-secondary" onclick="hideInvite()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Language Picker Modal (통화 중 변경) -->
+<div class="modal-bg hide" id="langModal" onclick="hideLangPicker()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">🌐 언어 변경</div>
+    <div class="lang-grid" id="langGrid">
+      <button class="lang-opt active" data-lang="ko-KR" onclick="setLang('ko-KR','🇰🇷','한국어')">🇰🇷 한국어</button>
+      <button class="lang-opt" data-lang="en-US"  onclick="setLang('en-US','🇺🇸','English')">🇺🇸 English</button>
+      <button class="lang-opt" data-lang="ja-JP"  onclick="setLang('ja-JP','🇯🇵','日本語')">🇯🇵 日本語</button>
+      <button class="lang-opt" data-lang="zh-CN"  onclick="setLang('zh-CN','🇨🇳','中文')">🇨🇳 中文</button>
+      <button class="lang-opt" data-lang="es-ES"  onclick="setLang('es-ES','🇪🇸','Español')">🇪🇸 Español</button>
+      <button class="lang-opt" data-lang="fr-FR"  onclick="setLang('fr-FR','🇫🇷','Français')">🇫🇷 Français</button>
+      <button class="lang-opt" data-lang="de-DE"  onclick="setLang('de-DE','🇩🇪','Deutsch')">🇩🇪 Deutsch</button>
+      <button class="lang-opt" data-lang="pt-BR"  onclick="setLang('pt-BR','🇧🇷','Português')">🇧🇷 Português</button>
+      <button class="lang-opt" data-lang="hi-IN"  onclick="setLang('hi-IN','🇮🇳','हिन्दी')">🇮🇳 हिन्दी</button>
+      <button class="lang-opt" data-lang="vi-VN"  onclick="setLang('vi-VN','🇻🇳','Tiếng Việt')">🇻🇳 Tiếng Việt</button>
+      <button class="lang-opt" data-lang="fil-PH" onclick="setLang('fil-PH','🇵🇭','Filipino')">🇵🇭 Filipino</button>
+      <button class="lang-opt" data-lang="mn-MN"  onclick="setLang('mn-MN','🇲🇳','Монгол')">🇲🇳 Монгол</button>
+      <button class="lang-opt" data-lang="km-KH"  onclick="setLang('km-KH','🇰🇭','ខ្មែរ')">🇰🇭 ខ្មែរ</button>
+    </div>
+    <button class="btn btn-secondary" onclick="hideLangPicker()">닫기</button>
+  </div>
+</div>
+
+<!-- YouTube 확인 팝업 -->
+<div id="ytModal" class="hide">
+  <div class="yt-box">
+    <div class="yt-icon">▶️</div>
+    <div class="yt-title">필통목사의 유튜브로<br>이동합니다</div>
+    <div class="yt-sub">youtube.com/@tempusan</div>
+    <div class="yt-btns">
+      <button class="yt-go"     onclick="ytConfirm()">이동</button>
+      <button class="yt-cancel" onclick="ytClose()">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast & Mode Indicator -->
+<div id="toast" class="hide">알림</div>
+<div id="mode-ind"></div>
+
+<script>
+/* ============================================================
+   STATE
+============================================================ */
+let peer    = null;
+let stream  = null;
+let room    = '';
+let iAmHost = false;
+let micOn   = true;
+let camOn   = true;
+let pttMode   = false;  // 기본: 항상 켜짐 (자동 음성인식)
+let pttActive = false;
+
+const calls    = {};   // peerId → MediaConnection
+const dataCons = {};   // peerId → DataConnection
+let audioCtx   = null;
+const audioIntervals = {};
+
+let guestSeq  = 0;
+const guestNames = {};  // peerId → display name
+const guestLangs = {};  // peerId → { lang, flag, name }
+
+// 자막
+let subtitleOn   = true;
+let userLang     = 'ko-KR';
+let userLangFlag = '🇰🇷';
+let userLangName = '한국어';
+let recognition  = null;
+let recogRunning = false;
+const transCache = {};
+
+// join flow
+let pendingJoinCode = '';
+
+// 셀프 테스트
+let selfTestMode       = false;
+let selfTestTargetLang = 'en';
+let selfTestTargetFlag = '🇺🇸';
+let selfTestTargetName = 'English';
+
+// 기기 감지
+const isIOS     = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isAndroid = /Android/.test(navigator.userAgent);
+
+/* ============================================================
+   오디오 컨텍스트 unlock (iOS 필수)
+============================================================ */
+function unlockAudio() {
+  if (audioCtx) {
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  } else {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    } catch(e) {}
+  }
+  document.removeEventListener('touchstart', unlockAudio);
+  document.removeEventListener('click',      unlockAudio);
+}
+document.addEventListener('touchstart', unlockAudio, { passive: true });
+document.addEventListener('click',      unlockAudio, { once: true });
+
+/* ============================================================
+   YOUTUBE
+============================================================ */
+const YT_URL = 'https://www.youtube.com/@tempusan';
+function openYouTube() { document.getElementById('ytModal').classList.remove('hide'); }
+function ytConfirm() { document.getElementById('ytModal').classList.add('hide'); window.open(YT_URL, '_blank', 'noopener'); }
+function ytClose()   { document.getElementById('ytModal').classList.add('hide'); }
+
+/* ============================================================
+   UTILITIES
+============================================================ */
+async function pasteCode(input) {
+  if (input.value.length > 0) return;
+  try {
+    const text = await navigator.clipboard.readText();
+    const clean = text.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+    if (clean.length >= 3) { input.value = clean; input.blur(); }
+  } catch(e) { /* 클립보드 권한 없음 — 사용자가 직접 입력 */ }
+}
+let toastTimer = null;
+function toast(msg, dur = 3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.remove('hide');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hide'), dur);
+}
+let modeTimer = null;
+function modeInd(msg) {
+  const el = document.getElementById('mode-ind');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(modeTimer);
+  modeTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+function guestName(pid) {
+  if (!guestNames[pid]) { guestSeq++; guestNames[pid] = '게스트 ' + guestSeq; }
+  return guestNames[pid];
+}
+function lc(fullLang) { return (fullLang || 'ko').split('-')[0]; }
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* ============================================================
+   LANDING ACTIONS
+============================================================ */
+let createdRoomCode = '';
+function doCreate() {
+  const C = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  createdRoomCode = Array.from({ length: 6 }, () => C[Math.random() * C.length | 0]).join('');
+  document.getElementById('codeInput').value = createdRoomCode;
+  document.getElementById('createdCode').textContent = createdRoomCode;
+  document.getElementById('createdBlock').classList.remove('hide');
+  const btn = document.querySelector('.btn-copy');
+  btn.textContent = '📋 채널코드 복사하기'; btn.classList.remove('copied');
+  setTimeout(() => {
+    document.getElementById('joinCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 200);
+}
+function copyCreatedCode() {
+  const code = createdRoomCode || document.getElementById('createdCode').textContent;
+  navigator.clipboard.writeText(code)
+    .then(() => {
+      const btn = document.querySelector('.btn-copy');
+      btn.textContent = '✅ 복사됐어요!'; btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = '📋 채널코드 복사하기'; btn.classList.remove('copied'); }, 2500);
+    })
+    .catch(() => toast('채널 코드: ' + code));
+}
+
+/* ── 셀프 테스트 ── */
+function doSelfTest() {
+  document.getElementById('selfTestModal').classList.remove('hide');
+}
+function selectSelfTestSrc(btn) {
+  document.querySelectorAll('#selfTestSrcGrid .lang-join-opt').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+function selectSelfTestDst(btn) {
+  document.querySelectorAll('#selfTestDstGrid .lang-join-opt').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+async function confirmSelfTest() {
+  const src = document.querySelector('#selfTestSrcGrid .lang-join-opt.sel');
+  const dst = document.querySelector('#selfTestDstGrid .lang-join-opt.sel');
+  if (!src || !dst) { toast('언어를 선택해 주세요'); return; }
+  if (lc(src.dataset.lang) === dst.dataset.lang) { toast('말할 언어와 번역 언어가 같아요!'); return; }
+
+  userLang         = src.dataset.lang;
+  userLangFlag     = src.dataset.flag;
+  userLangName     = src.dataset.name;
+  selfTestTargetLang = dst.dataset.lang;
+  selfTestTargetFlag = dst.dataset.flag;
+  selfTestTargetName = dst.dataset.name;
+  selfTestMode     = true;
+
+  const btn = document.querySelector('#selfTestModal .btn-join-confirm');
+  btn.textContent = '⏳ 시작 중...';
+  btn.disabled    = true;
+
+  // 더미 채널코드로 세션 시작 (PeerJS 연결 없이)
+  const ok = await startSession('SELF-TEST', false);
+  if (!ok) {
+    btn.textContent = '🧪 테스트 시작';
+    btn.disabled = false;
+    selfTestMode = false;
+    return;
+  }
+  document.getElementById('selfTestModal').classList.add('hide');
+  btn.textContent = '🧪 테스트 시작';
+  btn.disabled = false;
+
+  // 헤더 UI 교체
+  document.getElementById('peerBadge').style.display  = 'none';
+  const badge = document.getElementById('selfTestBadge');
+  badge.classList.remove('hide');
+  badge.style.display = 'flex';
+  document.getElementById('chLbl').textContent  = '테스트';
+  document.getElementById('hdrCode').textContent = src.dataset.flag + '→' + dst.dataset.flag;
+
+  // 셀프 테스트 전용 텍스트 입력창 항상 표시
+  const stWrap = document.getElementById('selfTestInputWrap');
+  if (stWrap) stWrap.style.display = 'flex';
+
+  toast(`🧪 말하거나 입력하면 ${dst.dataset.name}로 번역됩니다!`, 4000);
+}
+
+/* ── JOIN: 언어 선택 먼저 ── */
+function doJoin() {
+  const code = document.getElementById('codeInput').value.trim();
+  if (code.length < 3) { toast('참여할 채널 코드를 입력해 주세요'); return; }
+  pendingJoinCode = code;
+  document.getElementById('langJoinModal').classList.remove('hide');
+}
+function selectJoinLang(btn) {
+  document.querySelectorAll('.lang-join-opt').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+async function confirmJoinLang() {
+  const active = document.querySelector('.lang-join-opt.sel');
+  if (active) {
+    userLang     = active.dataset.lang;
+    userLangFlag = active.dataset.flag;
+    userLangName = active.dataset.name;
+    // in-call 언어 UI 동기화
+    document.getElementById('langIcon').textContent = userLangFlag;
+    document.getElementById('langLbl').textContent  = userLangName;
+    document.querySelectorAll('.lang-opt').forEach(el => {
+      el.classList.toggle('active', el.dataset.lang === userLang);
+    });
+  }
+  // ★ 모달을 먼저 닫지 말고, 버튼을 로딩 상태로 전환
+  const btn = document.querySelector('.btn-join-confirm');
+  const origText = btn.textContent;
+  btn.textContent = '⏳ 연결 중...';
+  btn.disabled = true;
+
+  const ok = await startSession(pendingJoinCode, true);
+
+  if (!ok) {
+    // 실패 시 모달 상태 복구 (랜딩 페이지로 튕기지 않음)
+    btn.textContent = origText;
+    btn.disabled = false;
+    return;
+  }
+  document.getElementById('langJoinModal').classList.add('hide');
+}
+
+/* ============================================================
+   SESSION START
+============================================================ */
+async function startSession(code, tryHost) {
+  room = code;
+
+  // iOS Safari는 sampleRate 제약 미지원 → 제외, 비디오 제약도 단순화
+  const videoConstraints = isIOS ? {
+    facingMode: 'user',
+    width: { ideal: 640 },
+    height: { ideal: 480 }
+  } : {
+    facingMode: { ideal: 'user' },
+    width: { ideal: 640, max: 1280 },
+    height: { ideal: 480, max: 720 }
+  };
+  const audioConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    ...(isIOS ? {} : { sampleRate: 44100 })   // iOS Safari는 sampleRate 미지원
+  };
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: audioConstraints });
+  } catch(e) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: audioConstraints });
+      toast('📷 카메라 없이 음성만 연결됩니다');
+    } catch(e2) {
+      if (isIOS) {
+        // iOS 최후 폴백: 가장 단순한 제약으로 재시도
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+          toast('📷 음성만 연결됩니다 (iOS 기본 모드)');
+        } catch(e3) {
+          toast('📷 카메라·마이크 권한이 필요해요 (Safari 설정 확인)');
+          return false;   // ★ 실패 반환
+        }
+      } else {
+        toast('📷 카메라·마이크 권한이 필요해요');
+        return false;     // ★ 실패 반환
+      }
+    }
+  }
+
+  // 화면 전환 (여기까지 왔으면 스트림 확보 성공)
+  document.getElementById('landing').classList.add('hide');
+  const callEl = document.getElementById('call');
+  callEl.classList.remove('hide'); callEl.classList.add('active');
+  document.getElementById('hdrCode').textContent = code;
+  document.getElementById('invCode').textContent  = code;
+
+  // 내 타일 추가
+  addTile('me', stream, true);
+  monitorAudio('me', stream);
+
+  // 음성인식 초기화
+  setupRecog();
+  applyRecogUI();
+  applyMode();
+
+  // 셀프 테스트 모드: PeerJS 연결 생략
+  if (!selfTestMode) initPeer(code, tryHost);
+  return true;   // ★ 성공 반환
+}
+
+/* ============================================================
+   PEER
+============================================================ */
+/* ─── PeerJS 공통 설정
+     STUN: 공개 서버 (연결 경로 탐색)
+     TURN: Metered OpenRelay 무료 서버 (방화벽/NAT 뚫기)
+─── */
+const PEER_CONFIG = {
+  debug: 0,
+  config: {
+    iceServers: [
+      // STUN — 직접 연결 경로 탐색
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: 'stun:openrelay.metered.ca:80' },
+
+      // TURN — 방화벽·NAT 환경에서 중계 (Metered OpenRelay 무료)
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+      {
+        urls: 'turns:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+    ],
+    iceCandidatePoolSize: 10,
+    iceTransportPolicy: 'all',
+  }
+};
+
+function initPeer(code, tryHost) {
+  const wantedId = tryHost ? code : undefined;
+  peer = new Peer(wantedId, PEER_CONFIG);
+
+  peer.on('open', id => {
+    iAmHost = (id === code);
+    if (!iAmHost) connectToHost(code);
+    refreshCount();
+  });
+  peer.on('call', call => { call.answer(stream); handleMediaStream(call); });
+  peer.on('connection', conn => setupDataIn(conn));
+  peer.on('error', err => {
+    if (err.type === 'unavailable-id') {
+      peer.destroy();
+      peer = new Peer(undefined, PEER_CONFIG);
+      wireGlobalPeer(peer, code);
+      peer.on('open', () => { connectToHost(code); refreshCount(); });
+    } else if (err.type === 'peer-unavailable') {
+      toast('❌ 채널을 찾을 수 없어요. 코드를 다시 확인해 주세요.');
+      setTimeout(leaveRoom, 1800);
+    } else {
+      toast('⚠️ 연결 오류: ' + err.type);
+    }
+  });
+  peer.on('disconnected', () => { toast('🔄 재연결 중...'); peer.reconnect(); });
+}
+
+function wireGlobalPeer(p, code) {
+  p.on('call', call => { call.answer(stream); handleMediaStream(call); });
+  p.on('connection', conn => setupDataIn(conn));
+  p.on('error', err => {
+    if (err.type === 'peer-unavailable') { toast('❌ 채널을 찾을 수 없어요.'); setTimeout(leaveRoom, 1800); }
+    else toast('⚠️ 오류: ' + err.type);
+  });
+}
+
+/* ============================================================
+   DATA CHANNEL
+============================================================ */
+function myInfo() {
+  return { type: 'join', peerId: peer ? peer.id : '', lang: userLang, flag: userLangFlag, name: userLangName };
+}
+
+function connectToHost(code) {
+  const c = peer.connect(code, { reliable: true });
+  c.on('open', () => {
+    dataCons[code] = c;
+    c.send(myInfo());
+    // ★ 데이터 채널 작동 여부 확인용 ping
+    try { c.send({ type: 'ping' }); } catch(e) {}
+  });
+  c.on('data', d => onData(d, code));
+  c.on('close', () => { delete dataCons[code]; removeTile(code); toast('호스트 연결이 끊겼어요'); refreshCount(); });
+  c.on('error', e => console.warn('[TalkBox] data err', e));
+}
+
+const MAX_PARTICIPANTS = 5;  // ★ 최대 인원 (호스트 포함)
+
+function setupDataIn(conn) {
+  conn.on('open', () => {
+    // ★ 인원 초과 시 즉시 거절
+    const current = Object.keys(dataCons).length + 1; // +1 = 호스트 자신
+    if (iAmHost && current >= MAX_PARTICIPANTS) {
+      try { conn.send({ type: 'full', max: MAX_PARTICIPANTS }); } catch(e) {}
+      setTimeout(() => { try { conn.close(); } catch(e) {} }, 300);
+      toast(`⚠️ 최대 ${MAX_PARTICIPANTS}명까지만 참여 가능합니다`);
+      return;
+    }
+    dataCons[conn.peer] = conn;
+    // ★ 새 게스트 연결 시 내 lang_info 즉시 전송 (화자 정보 보장)
+    try { conn.send({ type: 'lang_info', peerId: peer ? peer.id : '', lang: userLang, flag: userLangFlag, name: userLangName }); } catch(e) {}
+  });
+  conn.on('data', d => onData(d, conn.peer));
+  conn.on('close', () => {
+    delete dataCons[conn.peer];
+    removeTile(conn.peer);
+    if (iAmHost) broadcastList();
+    refreshCount();
+  });
+}
+
+function onData(msg, from) {
+  // ★ switch 각 case를 블록{}으로 감싸서 const 스코프 오류 방지
+  switch (msg.type) {
+
+    case 'join': {
+      if (!iAmHost) break;
+      if (msg.lang) guestLangs[from] = { lang: msg.lang, flag: msg.flag || '🌐', name: msg.name || '' };
+      const existing = [peer.id, ...Object.keys(dataCons).filter(p => p !== from)];
+      if (dataCons[from]) {
+        try { dataCons[from].send({ type: 'peers', list: existing }); } catch(e) {}
+        try { dataCons[from].send({ type: 'lang_info', peerId: peer.id, lang: userLang, flag: userLangFlag, name: userLangName }); } catch(e) {}
+      }
+      Object.entries(dataCons).forEach(([pid, c]) => {
+        if (pid !== from) {
+          try { c.send({ type: 'lang_info', peerId: from, lang: msg.lang || 'ko', flag: msg.flag || '🌐', name: msg.name || '' }); } catch(e) {}
+        }
+      });
+      break;
+    }
+
+    case 'peers': {
+      syncPeers(msg.list);
+      break;
+    }
+
+    case 'lang_info': {
+      guestLangs[msg.peerId] = { lang: msg.lang, flag: msg.flag, name: msg.name };
+      updateTileLangBadge(msg.peerId, msg.flag);
+      if (iAmHost) {
+        Object.entries(dataCons).forEach(([pid, c]) => {
+          if (pid !== from) { try { c.send(msg); } catch(e) {} }
+        });
+      }
+      break;
+    }
+
+    case 'full': {
+      // ★ 방이 꽉 찼을 때 호스트가 보내는 메시지
+      toast(`❌ 방이 꽉 찼습니다 (최대 ${msg.max || MAX_PARTICIPANTS}명)`);
+      setTimeout(leaveRoom, 2000);
+      break;
+    }
+
+    case 'ping': {
+      // ★ ping 수신 → pong 응답 (게스트가 채널 확인용으로 보낸 것)
+      if (iAmHost && dataCons[from]) {
+        try { dataCons[from].send({ type: 'pong' }); } catch(e) {}
+      }
+      break;
+    }
+
+    case 'pong': {
+      // ★ pong 수신 → 데이터 채널 정상 확인
+      toast('🔗 데이터 채널 연결 확인됨');
+      break;
+    }
+
+    case 'subtitle': {
+      // 호스트면 다른 참가자들에게 중계
+      if (iAmHost) {
+        Object.entries(dataCons).forEach(([pid, c]) => {
+          if (pid !== from) { try { c.send(msg); } catch(e) {} }
+        });
+      }
+      if (!subtitleOn) break;
+      if (!msg.text || !msg.text.trim()) break;   // ★ 빈 텍스트 방어
+
+      try {
+        const fromLang = lc(msg.lang || 'ko');
+        const toLang   = lc(userLang);
+        const gInfo    = guestLangs[msg.peerId] || {};
+        const spkFlag  = gInfo.flag || '👤';
+        const spkName  = guestNames[msg.peerId] || gInfo.name || '상대방';
+        const label    = `${spkFlag} ${spkName}`;
+
+        // ★ 원문 즉시 표시 (번역 기다리지 않음)
+        addSubEntry(msg.peerId, label, msg.text.trim(), false);
+
+        // ★ 번역이 원문과 다르면 번역문도 추가 표시
+        if (fromLang !== toLang) {
+          translateText(msg.text.trim(), fromLang, toLang).then(translated => {
+            if (translated && translated !== msg.text.trim()) {
+              addSubEntry(msg.peerId + '_tr', `🔤 ${spkName}`, translated, false);
+            }
+          }).catch(() => {});
+        }
+      } catch(err) {
+        addSubEntry(msg.peerId || 'peer', '👤 상대방', msg.text || '', false);
+      }
+      break;
+    }
+  }
+}
+
+function broadcastList() {
+  const list = [peer.id, ...Object.keys(calls)];
+  Object.values(dataCons).forEach(c => { try { c.send({ type: 'peers', list }); } catch(e) {} });
+}
+function syncPeers(list) {
+  (list || []).forEach(pid => { if (pid && pid !== peer.id && !calls[pid]) callPeer(pid); });
+}
+function broadcastSubtitle(text, lang) {
+  const msg = { type: 'subtitle', peerId: peer ? peer.id : 'me', text, lang };
+  if (iAmHost) {
+    Object.values(dataCons).forEach(c => { try { c.send(msg); } catch(e) {} });
+  } else {
+    const hc = dataCons[room];
+    if (hc) { try { hc.send(msg); } catch(e) {} }
+  }
+}
+function broadcastLangInfo() {
+  const msg = { type: 'lang_info', peerId: peer ? peer.id : 'me', lang: userLang, flag: userLangFlag, name: userLangName };
+  if (iAmHost) {
+    Object.values(dataCons).forEach(c => { try { c.send(msg); } catch(e) {} });
+  } else {
+    const hc = dataCons[room];
+    if (hc) { try { hc.send(msg); } catch(e) {} }
+  }
+}
+
+/* ============================================================
+   MEDIA CALLS
+============================================================ */
+// ★ iOS: WebRTC 스트림 연결 후 음성인식이 중단될 수 있어 재기동 시도
+function onPeerStreamConnected() {
+  if (isIOS && !recogRunning && micOn) {
+    console.log('[TalkBox] iOS 스트림 연결 후 음성인식 재기동');
+    setTimeout(() => { stopRecog(); setTimeout(startRecog, 500); }, 1000);
+  }
+}
+
+function callPeer(pid) {
+  const c = peer.call(pid, stream);
+  if (!c) return;
+  calls[pid] = c;
+  c.on('stream', s => { addTile(pid, s, false); monitorAudio(pid, s); refreshCount(); onPeerStreamConnected(); });
+  c.on('close',  () => { delete calls[pid]; removeTile(pid); refreshCount(); });
+  c.on('error',  () => { delete calls[pid]; removeTile(pid); refreshCount(); });
+}
+function handleMediaStream(c) {
+  const pid = c.peer;
+  if (calls[pid]) {
+    if (peer.id < pid) { c.close(); return; }
+    else { calls[pid].close(); delete calls[pid]; }
+  }
+  calls[pid] = c;
+  c.on('stream', s => { addTile(pid, s, false); monitorAudio(pid, s); refreshCount(); onPeerStreamConnected(); });
+  c.on('close',  () => { delete calls[pid]; removeTile(pid); refreshCount(); });
+}
+
+/* ============================================================
+   VIDEO TILES — 인원 제한 없음
+============================================================ */
+function addTile(pid, s, isMe) {
+  removeTile(pid);
+  const grid = document.getElementById('vgrid');
+
+  const tile = document.createElement('div');
+  tile.className = 'vtile' + (isMe ? ' is-me' : '');
+  tile.id = 'tile-' + pid;
+
+  // 언어 뱃지
+  const badge = document.createElement('div');
+  badge.className = 'lang-badge';
+  badge.id = 'langbadge-' + pid;
+  badge.textContent = isMe ? userLangFlag : (guestLangs[pid] && guestLangs[pid].flag) || '👤';
+
+  // 비디오
+  const vid = document.createElement('video');
+  vid.autoplay    = true;
+  vid.playsInline = true;
+  vid.setAttribute('playsinline', '');
+  vid.setAttribute('webkit-playsinline', '');
+  vid.setAttribute('x5-playsinline', '');       // 안드로이드 WeChat
+  vid.setAttribute('x5-video-player-type', 'h5');
+  // iOS는 원격 스트림도 일단 음소거로 시작 → autoplay 허용 후 해제
+  if (isMe || isIOS) vid.muted = true;
+  vid.srcObject = s;
+
+  // iOS/안드로이드 autoplay 처리
+  const pp = vid.play();
+  if (pp && pp.catch) {
+    pp.catch(() => {
+      // 재생 실패 시 무조건 음소거 후 재시도
+      vid.muted = true;
+      vid.play()
+        .then(() => {
+          if (!isMe) setTimeout(() => { vid.muted = false; }, 800);
+        })
+        .catch(() => {});
+    });
+  }
+  // iOS: 음소거 상태로 시작한 원격 스트림 → 사용자 인터랙션 후 음소거 해제
+  if (isIOS && !isMe) {
+    const unmute = () => {
+      if (vid.muted) {
+        vid.muted = false;
+        vid.play().catch(() => {});
+      }
+    };
+    document.addEventListener('touchstart', unmute, { once: true, passive: true });
+    document.addEventListener('click',      unmute, { once: true });
+  }
+
+  // 타일 오버레이
+  const ov = document.createElement('div'); ov.className = 'toverlay';
+  const nm = document.createElement('div'); nm.className = 'tname';
+  nm.textContent = isMe ? ('나 ' + userLangFlag) : (guestName(pid) + ' ' + ((guestLangs[pid] && guestLangs[pid].flag) || ''));
+  ov.appendChild(nm);
+
+  // 스피킹 링
+  const ring = document.createElement('div'); ring.className = 'speak-ring';
+
+  tile.appendChild(badge);
+  tile.appendChild(vid);
+  tile.appendChild(ov);
+  tile.appendChild(ring);
+  grid.appendChild(tile);
+
+  reLayout();
+}
+
+function updateTileLangBadge(pid, flag) {
+  const badge = document.getElementById('langbadge-' + pid);
+  if (badge) badge.textContent = flag;
+  const tile  = document.getElementById('tile-' + pid);
+  if (tile) {
+    const nm = tile.querySelector('.tname');
+    if (nm) nm.textContent = (guestNames[pid] || '게스트') + ' ' + flag;
+  }
+}
+
+function removeTile(pid) {
+  const el = document.getElementById('tile-' + pid);
+  if (el) { el.remove(); reLayout(); }
+  if (audioIntervals[pid]) { clearInterval(audioIntervals[pid]); delete audioIntervals[pid]; }
+}
+
+/* ─── 동적 그리드 레이아웃 — 인원 제한 없음 ─── */
+function reLayout() {
+  const grid  = document.getElementById('vgrid');
+  const tiles = grid.querySelectorAll('.vtile');
+  const n     = tiles.length;
+
+  if (n === 0) {
+    grid.style.gridTemplateColumns = '1fr';
+    grid.style.gridTemplateRows   = '1fr';
+    grid.style.gridAutoRows        = '1fr';
+    refreshCount(); return;
+  }
+
+  let cols;
+  if      (n === 1) cols = 1;
+  else if (n <= 4)  cols = 2;
+  else if (n <= 9)  cols = 3;
+  else              cols = 4;   // 10명 이상: 4열, 스크롤
+
+  const rows = Math.ceil(n / cols);
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+  if (n <= 9) {
+    // 화면을 꽉 채우기
+    grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+    grid.style.gridAutoRows     = '1fr';
+  } else {
+    // 많은 인원: 고정 높이로 스크롤
+    grid.style.gridTemplateRows = '';
+    grid.style.gridAutoRows     = 'minmax(130px, 1fr)';
+  }
+
+  refreshCount();
+}
+
+function refreshCount() {
+  const n = document.getElementById('vgrid').querySelectorAll('.vtile').length;
+  document.getElementById('peerCount').textContent = n;
+}
+
+/* ============================================================
+   AUDIO MONITORING (말하기 감지)
+============================================================ */
+function monitorAudio(pid, s) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const an = audioCtx.createAnalyser();
+    an.fftSize = 512; an.smoothingTimeConstant = 0.6;
+    audioCtx.createMediaStreamSource(s).connect(an);
+    const buf = new Uint8Array(an.frequencyBinCount);
+    let was = false;
+    audioIntervals[pid] = setInterval(() => {
+      an.getByteFrequencyData(buf);
+      const avg = buf.reduce((a, b) => a + b, 0) / buf.length;
+      const now = avg > 7;
+      if (now !== was) {
+        was = now;
+        const tile = document.getElementById('tile-' + pid);
+        if (tile) tile.classList.toggle('talking', now);
+      }
+    }, 80);
+  } catch(e) { console.warn('audio monitor:', e); }
+}
+
+/* ============================================================
+   CONTROLS
+============================================================ */
+function toggleMic() {
+  micOn = !micOn;
+  if (stream) stream.getAudioTracks().forEach(t => t.enabled = micOn);
+  const btn = document.getElementById('micBtn');
+  btn.classList.toggle('on', micOn); btn.classList.toggle('off', !micOn);
+  btn.querySelector('.cbtn-inner').textContent = micOn ? '🎤' : '🔇';
+  modeInd(micOn ? '🎤 마이크 켜짐' : '🔇 마이크 꺼짐');
+}
+function toggleCam() {
+  camOn = !camOn;
+  if (stream) stream.getVideoTracks().forEach(t => t.enabled = camOn);
+  const btn = document.getElementById('camBtn');
+  btn.classList.toggle('on', camOn); btn.classList.toggle('off', !camOn);
+  btn.querySelector('.cbtn-inner').textContent = camOn ? '📷' : '🚫';
+  const myVid = document.querySelector('#tile-me video');
+  if (myVid) myVid.style.opacity = camOn ? '1' : '0.25';
+  modeInd(camOn ? '📷 카메라 켜짐' : '🚫 카메라 꺼짐');
+}
+function applyMode() {
+  // 항상 켜짐 모드만 사용
+  const ptt = document.getElementById('pttBtn');
+  const mic = document.getElementById('micBtn');
+  setMicLive(true); micOn = true; startRecog();
+  startRecogWatchdog();  // ★ 음성인식 감시 시작
+  if (ptt) ptt.classList.add('always');
+  if (mic) { mic.className = 'cbtn on'; mic.querySelector('.cbtn-inner').textContent = '🎤'; }
+  document.getElementById('pttLbl').textContent = '마이크 자동 인식 중';
+}
+function setMicLive(on) {
+  if (stream) stream.getAudioTracks().forEach(t => t.enabled = on);
+}
+
+/* ─── PTT 제거됨: 항상 켜짐 모드만 사용 ─── */
+
+/* ============================================================
+   INVITE
+============================================================ */
+function showInvite() { document.getElementById('invModal').classList.remove('hide'); }
+function hideInvite() { document.getElementById('invModal').classList.add('hide'); }
+function copyCode() {
+  navigator.clipboard.writeText(room)
+    .then(() => { toast('✅ 코드가 복사되었어요!'); hideInvite(); })
+    .catch(() => toast('채널 코드: ' + room));
+}
+
+/* ============================================================
+   LEAVE
+============================================================ */
+function leaveRoom() {
+  Object.values(calls).forEach(c => { try { c.close(); } catch(e) {} });
+  Object.values(dataCons).forEach(c => { try { c.close(); } catch(e) {} });
+  if (stream)   { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if (peer)     { peer.destroy(); peer = null; }
+  if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  Object.keys(audioIntervals).forEach(k => { clearInterval(audioIntervals[k]); delete audioIntervals[k]; });
+  Object.keys(calls).forEach(k => delete calls[k]);
+  Object.keys(dataCons).forEach(k => delete dataCons[k]);
+  Object.keys(guestNames).forEach(k => delete guestNames[k]);
+  Object.keys(guestLangs).forEach(k => delete guestLangs[k]);
+  stopRecog();
+  stopRecogWatchdog();
+  guestSeq = 0; iAmHost = false; micOn = true; camOn = true;
+  pttMode = false; pttActive = false;  // 초기화도 항상 켜짐
+  // 셀프 테스트 상태 초기화
+  selfTestMode = false;
+  const stBadge = document.getElementById('selfTestBadge');
+  if (stBadge) { stBadge.classList.add('hide'); stBadge.style.display = 'none'; }
+  const stWrap = document.getElementById('selfTestInputWrap');
+  if (stWrap) stWrap.style.display = 'none';
+  const pb = document.getElementById('peerBadge');
+  if (pb) pb.style.display = '';
+  const chLbl = document.getElementById('chLbl');
+  if (chLbl) chLbl.textContent = '채널';
+  document.getElementById('vgrid').innerHTML = '';
+  document.getElementById('subStripInner').innerHTML = '<div class="sub-empty" id="subEmpty">자막이 여기에 표시됩니다</div>';
+  document.getElementById('call').classList.remove('active');
+  document.getElementById('call').classList.add('hide');
+  document.getElementById('landing').classList.remove('hide');
+}
+
+/* ============================================================
+   SUBTITLE TOGGLE
+============================================================ */
+function toggleSubtitle() {
+  subtitleOn = !subtitleOn;
+  const btn = document.getElementById('subBtn');
+  btn.classList.toggle('on', subtitleOn); btn.classList.toggle('off', !subtitleOn);
+  document.getElementById('subBtnLbl').textContent = subtitleOn ? '자막 켜짐' : '자막 꺼짐';
+  btn.querySelector('.cbtn-inner').textContent = subtitleOn ? '💬' : '💬';
+  document.getElementById('subStrip').style.opacity = subtitleOn ? '1' : '0.35';
+  modeInd(subtitleOn ? '💬 자막 켜짐' : '자막 꺼짐');
+}
+
+/* ============================================================
+   LANGUAGE PICKER (통화 중)
+============================================================ */
+function showLangPicker() { document.getElementById('langModal').classList.remove('hide'); }
+function hideLangPicker() { document.getElementById('langModal').classList.add('hide'); }
+function setLang(code, flag, name) {
+  userLang = code; userLangFlag = flag; userLangName = name;
+  document.getElementById('langIcon').textContent = flag;
+  document.getElementById('langLbl').textContent  = name;
+  document.querySelectorAll('.lang-opt').forEach(el => el.classList.toggle('active', el.dataset.lang === code));
+  // 내 타일 뱃지 업데이트
+  const badge = document.getElementById('langbadge-me');
+  if (badge) badge.textContent = flag;
+  const myTile = document.getElementById('tile-me');
+  if (myTile) { const nm = myTile.querySelector('.tname'); if (nm) nm.textContent = '나 ' + flag; }
+  broadcastLangInfo();
+  if (recogRunning) { stopRecog(); setTimeout(startRecog, 300); }
+  hideLangPicker();
+  modeInd('🌐 언어: ' + name);
+}
+
+/* ============================================================
+   SPEECH RECOGNITION
+============================================================ */
+const SRClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+const hasSpeechRecog = !!SRClass;
+
+function applyRecogUI() {
+  // 텍스트 입력창은 항상 표시됨 (별도 처리 불필요)
+  const pttWrap = document.getElementById('pttWrap');
+  if (!hasSpeechRecog) {
+    if (pttWrap) pttWrap.style.display = 'none';
+    toast('🍎 음성인식 미지원 — 텍스트 입력란을 이용하세요');
+  } else {
+    if (pttWrap) pttWrap.style.display = '';
+  }
+}
+
+function setupRecog() {
+  if (!SRClass) { applyRecogUI(); return; }
+  recognition = new SRClass();
+  recognition.continuous      = !isIOS;   // iOS는 onend에서 재시작
+  recognition.interimResults  = true;
+  recognition.maxAlternatives = 3;        // ★ 후보 3개 → 신뢰도 높은 것 선택
+
+  recognition.onresult = e => {
+    let interim = '', final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const result = e.results[i];
+      if (result.isFinal) {
+        // ★ 신뢰도 가장 높은 후보 선택
+        let best = result[0];
+        for (let j = 1; j < result.length; j++) {
+          if (result[j].confidence > best.confidence) best = result[j];
+        }
+        // ★ 신뢰도 0.15 미만만 무시 (너무 엄격하면 음성이 통째로 필터됨)
+        if (best.confidence > 0 && best.confidence < 0.15) continue;
+        final += best.transcript;
+      } else {
+        interim += result[0].transcript;
+      }
+    }
+    if (subtitleOn && interim.trim()) {
+      addSubEntry('me', userLangFlag + ' 나', interim.trim(), true);
+    }
+    // ★ 2글자 이상일 때만 번역 (잡음·단순 추임새 방어)
+    if (final.trim().length >= 2) translateAndBroadcast(final.trim());
+  };
+  recognition.onerror = e => {
+    recogRunning = false;
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    console.warn('recog error:', e.error);
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      // ★ 권한 거부 — 자동 재시도 완전 중단 (반복 팝업 방지)
+      stopRecogWatchdog();
+      micOn = false;
+      updateMicStatus(false);
+      highlightTextInput();  // ★ 텍스트 입력창 강조
+      toast('🎤 마이크 권한 없음 — 아래 텍스트 입력으로 자막을 보낼 수 있습니다');
+      return;  // 재시도 안 함
+    } else if (e.error === 'network') {
+      toast('🌐 음성인식 네트워크 오류 — 잠시 후 재시도합니다');
+      setTimeout(startRecog, 3000);
+    } else {
+      // ★ 기타 오류: 3초 후 1회만 재시도
+      setTimeout(startRecog, 3000);
+    }
+  };
+  recognition.onend = () => {
+    recogRunning = false;
+    updateMicStatus(false);
+    // ★ 2초 딜레이: 너무 빠른 재시작이 반복 권한 요청을 일으킴
+    if (micOn) setTimeout(startRecog, 2000);
+  };
+}
+
+function updateMicStatus(running) {
+  const txt = document.getElementById('micStatusTxt');
+  const btn = document.getElementById('micRestartBtn');
+  if (!txt) return;
+  if (running) {
+    txt.textContent = '🎤 ' + (userLangFlag || '') + ' 음성인식 중';
+    txt.style.color = 'var(--green)';
+    if (btn) btn.style.display = 'none';
+  } else {
+    txt.textContent = '🔇 음성인식 중지 — 텍스트 입력 또는 🔄 재시작';
+    txt.style.color = 'var(--amber)';
+    if (btn) btn.style.display = 'inline-block';
+  }
+}
+
+function highlightTextInput() {
+  const inp = document.getElementById('textSubInput');
+  const bar = document.getElementById('textSubBar');
+  if (!inp || !bar) return;
+  bar.style.borderTop = '2px solid var(--amber)';
+  inp.style.borderColor = 'var(--amber)';
+  inp.placeholder = '✏️ 여기에 말할 내용을 입력하고 전송하세요';
+  inp.focus();
+}
+
+function forceRestartRecog() {
+  micOn = true;  // ★ not-allowed로 꺼진 경우도 복구
+  stopRecog();
+  if (recognition) { try { recognition.abort(); } catch(e) {} recognition = null; }
+  recogRunning = false;
+  startRecogWatchdog();  // ★ watchdog도 재시작
+  setTimeout(() => { setupRecog(); startRecog(); }, 500);
+}
+
+// ★ 5초마다 음성인식 상태 감시 → 멈춰 있으면 자동 재시작
+let recogWatchdog = null;
+function startRecogWatchdog() {
+  if (recogWatchdog) return;
+  recogWatchdog = setInterval(() => {
+    updateMicStatus(recogRunning);
+    if (!recogRunning && micOn) {
+      console.log('[TalkBox] watchdog: 음성인식 재시작');
+      startRecog();
+    }
+  }, 30000);
+}
+function stopRecogWatchdog() {
+  if (recogWatchdog) { clearInterval(recogWatchdog); recogWatchdog = null; }
+}
+
+function startRecog() {
+  if (!recognition) setupRecog();
+  if (!recognition || recogRunning) return;
+  try {
+    recognition.lang = userLang;
+    recognition.start();
+    recogRunning = true;
+    updateMicStatus(true);
+  } catch(e) {
+    console.warn('recog start:', e);
+    recogRunning = false;
+    updateMicStatus(false);
+  }
+}
+function stopRecog() {
+  if (recognition && recogRunning) {
+    try { recognition.stop(); } catch(e) {}
+    recogRunning = false;
+    updateMicStatus(false);
+  }
+}
+
+/* ─── 텍스트 자막 전송 (iOS fallback / 셀프 테스트 공용) ─── */
+async function sendTextSub(inputId) {
+  const id  = inputId || 'textSubInput';
+  const inp = document.getElementById(id);
+  const text = inp.value.trim();
+  if (!text) return;
+  inp.value = '';
+  // translateAndBroadcast 로 통합 처리 (셀프 테스트 번역도 자동 포함)
+  await translateAndBroadcast(text);
+}
+
+/* ============================================================
+   TRANSLATE
+============================================================ */
+// ★ 4초 타임아웃 fetch
+const fetchT = (url, ms = 4000) => Promise.race([
+  fetch(url),
+  new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
+]);
+
+// ★ 1순위: Google 비공식 API
+async function translateGoogle(text, fromLang, toLang) {
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx` +
+    `&sl=${fromLang}&tl=${toLang}&dt=t&ie=UTF-8&oe=UTF-8` +
+    `&q=${encodeURIComponent(text)}`;
+  const res  = await fetchT(url);
+  const data = await res.json();
+  return data?.[0]?.map(s => s?.[0]).filter(Boolean).join('').trim() || '';
+}
+
+// ★ 2순위 백업: MyMemory 무료 API (Google 실패 시 자동 사용)
+async function translateMyMemory(text, fromLang, toLang) {
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${fromLang}|${toLang}`;
+  const res  = await fetchT(url, 5000);
+  const data = await res.json();
+  const t = data?.responseData?.translatedText || '';
+  // MyMemory는 실패 시 원문을 대문자로 돌려주는 경우 있음 → 걸러냄
+  return (t && t !== text.toUpperCase()) ? t : '';
+}
+
+async function translateText(text, fromLang, toLang) {
+  if (!text || fromLang === toLang) return text;
+  if (text.trim().length < 1) return text;
+  const key = `${fromLang}|${toLang}|${text}`;
+  if (transCache[key]) return transCache[key];
+
+  let result = '';
+
+  // ① Google 시도
+  try { result = await translateGoogle(text, fromLang, toLang); } catch(e) {}
+
+  // ② Google 실패 → MyMemory 백업
+  if (!result) {
+    try { result = await translateMyMemory(text, fromLang, toLang); } catch(e) {}
+  }
+
+  // ③ 둘 다 실패 → 원문 그대로
+  const final = result || text;
+  transCache[key] = final;
+  return final;
+}
+
+async function translateAndBroadcast(text) {
+  // 내 자막 (원문)
+  if (subtitleOn) addSubEntry('me', userLangFlag + ' 나', text, false);
+
+  // ★ 셀프 테스트 모드: 바로 번역해서 자막 표시
+  if (selfTestMode) {
+    const fromLang = lc(userLang);
+    const toLang   = selfTestTargetLang;
+    const translated = await translateText(text, fromLang, toLang);
+    if (subtitleOn && translated && translated !== text) {
+      addSubEntry('selftest', selfTestTargetFlag + ' ' + selfTestTargetName, translated, false);
+    }
+    return;  // 방송하지 않음
+  }
+
+  // 다른 사람들에게 원문 + 내 언어 코드 전송 → 각자 자신의 언어로 번역
+  broadcastSubtitle(text, lc(userLang));
+}
+
+/* ============================================================
+   ★ 자막 스트립 ★
+============================================================ */
+const MAX_SUB = 14;  // ★ 최대 자막 줄 수 증가
+
+// ★ pid에 따라 자막 행 종류 결정
+function subEntryClass(pid, isInterim) {
+  if (isInterim) return 'sub-entry interim';
+  if (pid === 'selftest') return 'sub-entry selftest-trans';
+  if (pid !== 'me') return 'sub-entry translated';   // 상대방 번역 자막
+  return 'sub-entry';
+}
+
+function addSubEntry(pid, speakerLabel, text, isInterim) {
+  const inner = document.getElementById('subStripInner');
+  if (!inner) return;
+
+  // 첫 자막 시 안내 문구 제거
+  const empty = document.getElementById('subEmpty');
+  if (empty) empty.remove();
+
+  if (isInterim) {
+    let el = document.getElementById('sub-int-' + pid);
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'sub-entry interim';
+      el.id = 'sub-int-' + pid;
+      inner.appendChild(el);
+    }
+    el.innerHTML = `<span class="sub-speaker">${escHtml(speakerLabel)}</span><span class="sub-text">${escHtml(text)}…</span>`;
+  } else {
+    // interim 제거
+    const interim = document.getElementById('sub-int-' + pid);
+    if (interim) interim.remove();
+
+    // ★ 최종 자막 추가 (종류별 클래스 적용)
+    const el = document.createElement('div');
+    el.className = subEntryClass(pid, false);
+    el.innerHTML = `<span class="sub-speaker">${escHtml(speakerLabel)}</span><span class="sub-text">${escHtml(text)}</span>`;
+    inner.appendChild(el);
+
+    // 최대 개수 유지
+    const finals = inner.querySelectorAll('.sub-entry:not(.interim)');
+    if (finals.length > MAX_SUB) finals[0].remove();
+  }
+
+  // 자동 스크롤
+  const strip = document.getElementById('subStrip');
+  if (strip) strip.scrollTop = strip.scrollHeight;
+}
+</script>
+</body>
+</html>
